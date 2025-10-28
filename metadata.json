@@ -1,0 +1,5 @@
+{
+  "name": "Copy of 阿嬤牌純手工歌詞器",
+  "description": "輸入歌曲和歌手，利用AI生成歌詞的動態視覺MV。應用程式會分析歌詞意境，生成對應的圖像，並將歌詞與圖像同步呈現。",
+  "requestFramePermissions": []
+}
