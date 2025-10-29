@@ -4,6 +4,8 @@ import PlayIcon from './icons/PlayIcon';
 import PauseIcon from './icons/PauseIcon';
 import PrevIcon from './icons/PrevIcon';
 import Loader from './Loader';
+import KaraokeLyric from './KaraokeLyric';
+import { lyricColorPalettes, ColorPalette } from '../styles/colors';
 
 interface VideoPlayerProps {
   timedLyrics: TimedLyric[];
@@ -29,6 +31,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
   const audioRef = useRef<HTMLAudioElement>(null);
   const [fontSize, setFontSize] = useState(48);
   const [fontFamily, setFontFamily] = useState('sans-serif');
+  const [currentColorPalette, setCurrentColorPalette] = useState<ColorPalette>(lyricColorPalettes[0]);
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [resolution, setResolution] = useState('720p');
   const isExportCancelled = useRef(false);
@@ -36,7 +39,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
-  const lyricRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const lyricRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const lyricsToRender = useMemo(() => {
     if (!timedLyrics || timedLyrics.length === 0) return [];
@@ -279,11 +282,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
            <div className={`relative z-10 w-full h-full flex items-center ${previewLayoutClass}`}>
               <div className={`flex flex-col justify-center items-start overflow-hidden ${lyricsContainerClass}`}>
                 <div ref={lyricsContainerRef} className="w-full transition-transform duration-500 ease-in-out">
-                    {lyricsToRender.map((lyric, index) => (
-                        <p key={index} ref={el => { lyricRefs.current[index] = el; }} className={`w-full p-2 tracking-wide leading-tight ${aspectRatio !== '16:9' ? 'text-center' : ''}`} style={getLyricStyle(index)}>
-                            {lyric.text || '\u00A0'}
-                        </p>
-                    ))}
+                    {lyricsToRender.map((lyric, index) => {
+                        const isCurrent = index === currentIndex;
+                        const isDummy = lyric.startTime < 0 || lyric.startTime > 9999;
+                        return (
+                            <div key={index} ref={el => { lyricRefs.current[index] = el; }}>
+                                {isCurrent && !isDummy ? (
+                                    <KaraokeLyric
+                                        text={lyric.text}
+                                        startTime={lyric.startTime}
+                                        endTime={lyric.endTime}
+                                        currentTime={currentTime}
+                                        isPlaying={isPlaying}
+                                        colorPalette={currentColorPalette}
+                                        style={getLyricStyle(index)}
+                                    />
+                                ) : (
+                                    <p className={`w-full p-2 tracking-wide leading-tight ${aspectRatio !== '16:9' ? 'text-center' : ''}`} style={getLyricStyle(index)}>
+                                        {lyric.text || '\u00A0'}
+                                    </p>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
               </div>
 
@@ -307,6 +328,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
                 <div className="flex items-center gap-2 text-white"><label htmlFor="font-size" className="text-xs">大小</label><input id="font-size" type="range" min="24" max="80" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} className="w-20 h-1.5 bg-white/30 rounded-full appearance-none cursor-pointer accent-[#a6a6a6]" /></div>
                 <div className="flex items-center gap-2 text-white"><label htmlFor="font-family" className="text-xs">字體</label><select id="font-family" value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} className="bg-gray-900/50 border border-gray-600 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-gray-500">{fontOptions.map(opt => <option key={opt.value} value={opt.value} style={{ fontFamily: opt.value }}>{opt.name}</option>)}</select></div>
                  <div className="flex items-center gap-2 text-white"><label htmlFor="aspect-ratio" className="text-xs">比例</label><select id="aspect-ratio" value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="bg-gray-900/50 border border-gray-600 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-gray-500"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select></div>
+                <div className="flex items-center gap-2 text-white"><label className="text-xs">色彩</label><div className="flex items-center gap-1.5">{lyricColorPalettes.map(palette => (<button key={palette.name} title={palette.name} onClick={() => setCurrentColorPalette(palette)} className={`w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 ${currentColorPalette.name === palette.name ? 'border-white' : 'border-transparent'}`} style={{ background: palette.bg }}/>))}</div></div>
                 <button onClick={handleExportSrt} className="px-3 py-2 text-sm bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-500 transition">導出 SRT</button>
                 <button onClick={handleExportVideo} className="px-3 py-2 text-sm bg-[#a6a6a6] text-gray-900 font-semibold rounded-lg hover:bg-[#999999] border border-white/50 transition">導出影片</button>
               </div>

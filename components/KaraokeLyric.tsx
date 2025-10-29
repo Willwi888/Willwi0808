@@ -1,4 +1,5 @@
 import React from 'react';
+import { ColorPalette } from '../styles/colors';
 
 interface KaraokeLyricProps {
   text: string;
@@ -6,10 +7,11 @@ interface KaraokeLyricProps {
   endTime: number;
   currentTime: number;
   isPlaying: boolean;
+  colorPalette: ColorPalette;
   style?: React.CSSProperties;
 }
 
-const KaraokeLyric: React.FC<KaraokeLyricProps> = ({ text, startTime, endTime, currentTime, isPlaying, style }) => {
+const KaraokeLyric: React.FC<KaraokeLyricProps> = ({ text, startTime, endTime, currentTime, isPlaying, colorPalette, style }) => {
   const duration = (endTime - startTime) * 1000;
   // Negative delay makes the animation jump to the correct progress if we start mid-lyric
   const delay = (startTime - currentTime) * 1000;
@@ -17,7 +19,7 @@ const KaraokeLyric: React.FC<KaraokeLyricProps> = ({ text, startTime, endTime, c
   const animationStyle: React.CSSProperties = {
     ...style,
     opacity: 0, // Start with opacity 0 for fade-in animation to take effect
-    backgroundImage: `linear-gradient(to right, #FFFFFF 50%, #9ca3af 50%)`,
+    backgroundImage: `linear-gradient(to right, ${colorPalette.highlight} 50%, ${colorPalette.base} 50%)`,
     backgroundSize: '200% 100%',
     backgroundPosition: '100%',
     WebkitBackgroundClip: 'text',
@@ -44,7 +46,7 @@ const KaraokeLyric: React.FC<KaraokeLyricProps> = ({ text, startTime, endTime, c
           }
         `}
       </style>
-      <p style={animationStyle} className="text-center font-bold drop-shadow-lg tracking-wide">
+      <p style={animationStyle} className={`w-full p-2 tracking-wide leading-tight text-center`}>
         {text}
       </p>
     </>
