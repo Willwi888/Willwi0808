@@ -18,25 +18,22 @@ const parseSrtTime = (time: string): number => {
  */
 export const parseSrt = (srtContent: string): TimedLyric[] => {
     const lyrics: TimedLyric[] = [];
-    // Normalize line endings and split into blocks
     const blocks = srtContent.replace(/\r\n/g, '\n').trim().split(/\n\s*\n/);
 
     for (const block of blocks) {
         const lines = block.split('\n');
-        if (lines.length >= 2) { // Minimum for a valid block is a time line and a text line
-            // The first line could be an index, but we don't strictly need it.
-            // We search for the timeline, which is more reliable.
+        if (lines.length >= 2) {
             const timeLineIndex = lines.findIndex(line => line.includes('-->'));
             
             if (timeLineIndex !== -1) {
                 const timeLine = lines[timeLineIndex];
-                const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})/);
+                const timeMatch = timeLine.match(/(\d{1,2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2},\d{3})/);
                 
                 if (timeMatch) {
                     const startTime = parseSrtTime(timeMatch[1]);
                     const endTime = parseSrtTime(timeMatch[2]);
                     const text = lines.slice(timeLineIndex + 1).join('\n').trim();
-                    if (text) { // Only add if there is lyric text
+                    if (text) {
                         lyrics.push({ text, startTime, endTime });
                     }
                 }
@@ -44,4 +41,18 @@ export const parseSrt = (srtContent: string): TimedLyric[] => {
         }
     }
     return lyrics;
+};
+
+/**
+ * Converts a File object to a base64 data URL.
+ * @param file The file to convert.
+ * @returns A promise that resolves with the base64 string.
+ */
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
 };
