@@ -4,7 +4,6 @@ import VideoPlayer from './components/VideoPlayer';
 import MusicIcon from './components/icons/MusicIcon';
 import ImageIcon from './components/icons/ImageIcon';
 import UploadIcon from './components/icons/UploadIcon';
-import LockIcon from './components/icons/LockIcon';
 import PencilIcon from './components/icons/PencilIcon';
 import SparklesIcon from './components/icons/SparklesIcon';
 import VideoCameraIcon from './components/icons/VideoCameraIcon';
@@ -12,6 +11,7 @@ import { TimedLyric } from './types';
 import Loader from './components/Loader';
 import { parseSrt, fileToBase64 } from './utils';
 import { generateImagesForLyrics, editImage, generateSrtFromLyrics, generateVideoFromImage } from './services/geminiService';
+import { completionMessages, inspirationalMessages, getRandomMessage } from './messages';
 
 
 type AppState = 'WELCOME' | 'FORM' | 'TIMING' | 'PREVIEW';
@@ -32,6 +32,8 @@ const App: React.FC = () => {
   const [isAiUnlocked, setIsAiUnlocked] = useState(false);
   const AI_PASSWORD = '8888';
   const audioDurationRef = useRef<number>(0);
+  const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
+  const aiMenuRef = useRef<HTMLDivElement>(null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [isKeySelected, setIsKeySelected] = useState(false);
@@ -44,6 +46,18 @@ const App: React.FC = () => {
         }
     };
     checkKey();
+  }, []);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (aiMenuRef.current && !aiMenuRef.current.contains(event.target as Node)) {
+            setIsAiMenuOpen(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   const audioUrl = audioFile ? URL.createObjectURL(audioFile) : '';
@@ -78,6 +92,7 @@ const App: React.FC = () => {
   const handleTimingComplete = useCallback((lyrics: TimedLyric[]) => {
     setTimedLyrics(lyrics);
     setAppState('PREVIEW');
+    alert(getRandomMessage(completionMessages));
   }, []);
 
   const handleBackToForm = useCallback(() => {
@@ -128,6 +143,7 @@ const App: React.FC = () => {
     try {
       const images = await generateImagesForLyrics(lyricsText, songTitle, artistName);
       setBackgroundImages(prev => [...prev, ...images]);
+      alert(getRandomMessage(inspirationalMessages));
     } catch (error) {
       console.error("AI image generation failed:", error);
       alert('AI 圖片生成失敗，請稍後再試。');
@@ -175,7 +191,7 @@ const App: React.FC = () => {
         const parsed = parseSrt(srtContent);
         if (parsed.length > 0) {
             setTimedLyricsFromSrt(parsed);
-            alert('AI 自動抓軌完成！您可以直接預覽，或先進入手動對時微調。');
+            alert(`AI 自動抓軌完成！您可以直接預覽，或先進入手動對時微調。\n\n${getRandomMessage(completionMessages)}`);
         } else {
             throw new Error("AI did not return valid SRT content.");
         }
@@ -219,6 +235,7 @@ const App: React.FC = () => {
         setVideoUrl(generatedVideoUrl);
         // Also set backgroundImages to the single source image for the album art
         setBackgroundImages([baseImage]); 
+        alert(`AI 影片生成成功！\n\n${getRandomMessage(inspirationalMessages)}`);
 
     } catch (error) {
         console.error("AI video generation failed:", error);
@@ -264,8 +281,9 @@ const App: React.FC = () => {
                     <h1 className="text-5xl font-extrabold text-[#a6a6a6] tracking-widest font-serif">文字泡麵</h1>
                     <h2 className="text-2xl font-light text-gray-300 mt-4 tracking-[0.1em]">純手打の溫度</h2>
                 </div>
-                <p className="text-gray-500 mt-20 text-md animate-pulse">用你的故事，煮一碗好麵。</p>
-                <p className="text-gray-600 mt-4 text-sm">點擊任意處開始創作</p>
+                <p className="text-gray-400 mt-20 text-md">用你的故事，煮一碗好麵。</p>
+                <p className="text-gray-500 mt-4 text-md animate-pulse">世界太快，但你還願意慢慢煮。</p>
+                <p className="text-gray-600 mt-8 text-sm">點擊任意處開始創作</p>
             </div>
         );
       case 'TIMING':
@@ -297,52 +315,112 @@ const App: React.FC = () => {
              {isLoading.active && <Loader message={isLoading.message} />}
              <audio src={audioUrl} onLoadedMetadata={handleAudioMetadata} className="hidden" />
             <div className="text-center">
-              <MusicIcon className="w-12 h-12 mx-auto text-gray-400" />
               <h2 className="mt-4 text-3xl font-bold tracking-tight text-white">
-                歌詞影片創作工具
+                泡麵歌詞器 — 音樂調理說明
               </h2>
               <p className="mt-2 text-sm text-gray-400">
-                上傳您的音樂與歌詞，手動或使用 AI 輔助，製作專屬動態歌詞 MV。
+                上傳您的作品與歌詞，開始烹煮專屬的動態歌詞 MV。<br/>（提醒：泡麵煮太久會變抒情歌）
               </p>
             </div>
             <form onSubmit={handleStart} className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="song-title" className="block text-sm font-medium text-gray-300 mb-2">歌曲名稱</label>
+                  <label htmlFor="song-title" className="block text-sm font-medium text-gray-300 mb-2">麵體（主歌）</label>
                   <input type="text" id="song-title" className="block w-full px-3 py-2 bg-gray-900/50 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm text-white" placeholder="請輸入歌曲名稱" value={songTitle} onChange={(e) => setSongTitle(e.target.value)} required />
+                  <p className="mt-1 text-xs text-gray-500">一碗沒有麵的泡麵，就是空洞的旋律。</p>
                 </div>
                 <div>
-                  <label htmlFor="artist-name" className="block text-sm font-medium text-gray-300 mb-2">歌手名稱</label>
+                  <label htmlFor="artist-name" className="block text-sm font-medium text-gray-300 mb-2">湯頭（歌手）</label>
                   <input type="text" id="artist-name" className="block w-full px-3 py-2 bg-gray-900/50 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm text-white" placeholder="請輸入歌手名稱" value={artistName} onChange={(e) => setArtistName(e.target.value)} required />
+                  <p className="mt-1 text-xs text-gray-500">誰熬的湯，誰的味道最濃。</p>
                 </div>
               </div>
 
               <div>
                  <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                    <label htmlFor="lyrics" className="block text-sm font-medium text-gray-300">歌詞</label>
+                    <label htmlFor="lyrics" className="block text-sm font-medium text-gray-300">加蛋加菜區（歌詞）</label>
                     <div className="flex items-center gap-4">
-                        <button type="button" onClick={() => handleAiRequest(runAiLyricTiming)} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white cursor-pointer transition-colors"><SparklesIcon className="w-4 h-4" /><span>AI 自動抓軌</span></button>
                         <label htmlFor="srt-upload" className="flex items-center gap-2 text-sm text-gray-400 hover:text-white cursor-pointer transition-colors"><UploadIcon className="w-4 h-4" /><span>上傳 SRT</span><input id="srt-upload" type="file" className="sr-only" accept=".srt" onChange={handleSrtUpload} /></label>
                     </div>
                  </div>
-                <textarea id="lyrics" rows={6} className="block w-full px-3 py-2 bg-gray-900/50 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm text-white disabled:bg-gray-800/70" placeholder="請在此貼上您的歌詞，或上傳 SRT 檔案..." value={lyricsText} onChange={(e) => setLyricsText(e.target.value)} required readOnly={!!timedLyricsFromSrt} />
+                 <p className="text-xs text-gray-400 -mt-1 mb-2">匯入 SRT 或直接貼上歌詞，讓湯頭更有層次、味道更溫柔。</p>
+                <textarea id="lyrics" rows={6} className="block w-full px-3 py-2 bg-gray-900/50 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm text-white disabled:bg-gray-800/70" placeholder="請在此貼上您的歌詞..." value={lyricsText} onChange={(e) => setLyricsText(e.target.value)} required readOnly={!!timedLyricsFromSrt} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">音訊檔案</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md"><div className="space-y-1 text-center"><MusicIcon className="mx-auto h-12 w-12 text-gray-500" /><div className="flex text-sm text-gray-400"><label htmlFor="audio-upload" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-gray-400 hover:text-gray-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-gray-900 focus-within:ring-gray-500"><span>上傳檔案</span><input id="audio-upload" name="audio-upload" type="file" className="sr-only" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} required /></label><p className="pl-1">或拖曳至此</p></div><p className="text-xs text-gray-500">{audioFile ? audioFile.name : 'MP3, WAV, FLAC, etc.'}</p></div></div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">🍲 主湯音訊檔（選擇乾濕吃法）</label>
+                <div className="mt-1 flex flex-col justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md">
+                    <div className="space-y-2 text-center">
+                        <div className="flex justify-center text-sm text-gray-400">
+                            <label htmlFor="audio-upload" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-gray-400 hover:text-gray-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-gray-900 focus-within:ring-gray-500 px-3 py-1">
+                                <span>上傳檔案</span><input id="audio-upload" name="audio-upload" type="file" className="sr-only" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} required />
+                            </label>
+                            <p className="pl-1 self-center">或直接拖曳進來</p>
+                        </div>
+                        <div className="text-xs text-gray-500 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-left pt-2 px-2">
+                            <div>
+                                <p className="font-semibold text-gray-400">乾吃法</p>
+                                <p>適合清唱版本或純伴奏。歌詞乾乾淨淨，節奏清晰入味。</p>
+                            </div>
+                            <div>
+                                <p className="font-semibold text-gray-400">濕吃法</p>
+                                <p>適合完整版音軌（含人聲＋伴奏）。聽完要配衛生紙，情緒湯濃得化不開。</p>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-600 pt-2">{audioFile ? audioFile.name : '支援格式：MP3, WAV, FLAC 等。'}</p>
+                    </div>
+                </div>
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                  <label className="block text-sm font-medium text-gray-300">背景 (圖片或 AI 影片)</label>
-                  <div className="flex items-center gap-2 text-sm">
-                    <button type="button" onClick={() => handleAiRequest(runAiVideoGeneration)} className="flex items-center gap-2 px-3 py-1 rounded-md bg-blue-800/50 hover:bg-blue-700/50 text-blue-200 transition-colors"><VideoCameraIcon className="w-4 h-4" /><span>AI 生成影片</span></button>
-                    <button type="button" onClick={() => handleAiRequest(runAiImageGeneration)} className="flex items-center gap-2 px-3 py-1 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"><LockIcon className="w-4 h-4" /><span>{isAiUnlocked ? 'AI 生成圖片' : '解鎖 AI'}</span></button>
-                  </div>
+                  <label className="block text-sm font-medium text-gray-300">配料加成（專輯／背景）</label>
+                    <div className="relative" ref={aiMenuRef}>
+                        <button 
+                            type="button" 
+                            onClick={() => isAiUnlocked ? setIsAiMenuOpen(p => !p) : handleAiRequest(() => setIsAiMenuOpen(true))} 
+                            className="flex items-center gap-2 px-3 py-1 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors text-sm"
+                        >
+                            <SparklesIcon className="w-4 h-4" />
+                            <span>天選之桶</span>
+                        </button>
+                        {isAiMenuOpen && isAiUnlocked && (
+                            <div className="absolute right-0 bottom-full mb-2 w-48 bg-gray-700 rounded-md shadow-lg z-20 border border-gray-600">
+                                <ul className="py-1">
+                                    <li>
+                                        <button onClick={() => { handleAiRequest(runAiLyricTiming); setIsAiMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 flex items-center gap-2 transition-colors">
+                                            <SparklesIcon className="w-4 h-4 text-purple-400" /> AI 自動抓軌
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button onClick={() => { handleAiRequest(runAiImageGeneration); setIsAiMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 flex items-center gap-2 transition-colors">
+                                            <ImageIcon className="w-4 h-4 text-green-400" /> AI 生成圖片
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button onClick={() => { handleAiRequest(runAiVideoGeneration); setIsAiMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-600 flex items-center gap-2 transition-colors">
+                                            <VideoCameraIcon className="w-4 h-4 text-blue-400" /> AI 生成影片
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                        )}
+                    </div>
                 </div>
                  {isAiUnlocked && !isKeySelected && <div className="text-xs text-center text-blue-300 bg-blue-900/50 p-2 rounded-md mb-2">AI 影片生成是 Beta 功能，需要您 <a href="#" onClick={(e) => { e.preventDefault(); window.aistudio.openSelectKey(); setIsKeySelected(true); }} className="font-bold underline">選擇 API 金鑰</a>。詳情請見 <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline">計費說明</a>。</div>}
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md"><div className="space-y-1 text-center"><ImageIcon className="mx-auto h-12 w-12 text-gray-500" /><div className="flex text-sm text-gray-400"><label htmlFor="image-upload" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-gray-400 hover:text-gray-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-gray-900 focus-within:ring-gray-500"><span>選擇圖片 (可多選)</span><input id="image-upload" type="file" className="sr-only" accept="image/*" multiple onChange={handleImageUpload} /></label></div><p className="text-xs text-gray-500">{videoUrl ? "已生成 AI 影片背景" : `已選擇 ${backgroundImages.length} 張圖片`}</p></div></div>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md">
+                    <div className="space-y-1 text-center">
+                        <ImageIcon className="mx-auto h-12 w-12 text-gray-500" />
+                        <div className="flex text-sm text-gray-400">
+                            <label htmlFor="image-upload" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-gray-400 hover:text-gray-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-gray-900 focus-within:ring-gray-500">
+                                <span>上傳圖片</span>
+                                <input id="image-upload" type="file" className="sr-only" accept="image/*" multiple onChange={handleImageUpload} />
+                            </label>
+                        </div>
+                        <p className="text-xs text-gray-500 px-4">選對配料，整碗更香。（也可用專輯封面或現場照片當背景）</p>
+                        <p className="text-xs text-gray-600">{videoUrl ? "已生成 AI 影片背景" : `已選擇 ${backgroundImages.length} 張圖片 | PNG, JPG`}</p>
+                    </div>
+                </div>
                 {backgroundImages.length > 0 && !videoUrl && (
                     <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         {backgroundUrls.map((url, index) => (
@@ -359,13 +437,13 @@ const App: React.FC = () => {
 
               <div>
                 <button type="submit" disabled={!lyricsText || !audioFile || !songTitle || !artistName} className="w-full flex justify-center py-3 px-4 border border-white/50 rounded-md shadow-sm text-sm font-bold text-gray-900 bg-[#a6a6a6] hover:bg-[#999999] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
-                  {timedLyricsFromSrt ? '完成並預覽' : '開始對時'}
+                  {timedLyricsFromSrt ? '煮好了，試吃看看' : '開始煮麵'}
                 </button>
               </div>
             </form>
             <div className="mt-6 pt-4 border-t border-gray-700 text-center text-xs text-gray-500">
-              <h4 className="font-semibold text-gray-400 mb-1">行動裝置使用建議</h4>
-              <p>建議使用電腦以獲得最佳體驗。若使用手機，建議橫向操作以便對時。</p>
+              <h4 className="font-semibold text-gray-400 mb-1">用心煮好麵 阿嬤說慢慢敲</h4>
+              <p>阿嬤說：煮麵要穩，別邊滑手機邊撈麵。建議用電腦操作，手機煮麵容易變燒焦。</p>
             </div>
           </div>
         );

@@ -210,7 +210,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
             setCurrentTime(0);
             await audioRef.current.play();
             setIsPlaying(true);
-            setExportProgress({ message: '正在錄製中... 歌曲結束後將自動停止並下載。' });
+            setExportProgress({ message: '慢工出真味... 時間不是敵人，是湯頭的朋友。阿嬤手刀飛奔中！' });
         }
 
         audioRef.current.onended = () => {
@@ -311,7 +311,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
                 <button onClick={handleExportVideo} className="px-3 py-2 text-sm bg-[#a6a6a6] text-gray-900 font-semibold rounded-lg hover:bg-[#999999] border border-white/50 transition">導出影片</button>
               </div>
           </div>
-          <div className="mt-3 text-center"><p className="text-xs text-gray-500">注意：影片匯出採用螢幕錄製，過程將播放完整音訊。請確保勾選「分享分頁音訊」並停留在本頁直到下載開始。</p></div>
+          <div className="mt-3 text-center"><p className="text-xs text-gray-500">慢工出真味，時間不是敵人，是湯頭的朋友。影片匯出時請確保勾選「分享分頁音訊」並停留在本頁，阿嬤會在旁為您加油！</p></div>
         </div>
       </div>
     </>
