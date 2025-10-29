@@ -24,13 +24,15 @@ const fontOptions = [
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageUrls, songTitle, artistName, onBack }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [exportProgress, setExportProgress] = useState<{ message: string; progress: number } | null>(null);
+  const [exportProgress, setExportProgress] = useState<{ message: string; progress?: number } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [fontSize, setFontSize] = useState(48);
   const [fontFamily, setFontFamily] = useState('sans-serif');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [resolution, setResolution] = useState('720p');
   const isExportCancelled = useRef(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const lyricRefs = useRef<(HTMLParagraphElement | null)[]>([]);
@@ -68,7 +70,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
     if (!audio) return;
 
     const timeUpdateHandler = () => setCurrentTime(audio.currentTime);
-    const endedHandler = () => setIsPlaying(false);
+    const endedHandler = () => {
+        setIsPlaying(false);
+        // Don't reset to 0, let it stay at the end
+    };
 
     audio.addEventListener('timeupdate', timeUpdateHandler);
     audio.addEventListener('ended', endedHandler);
@@ -136,6 +141,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
       if (isPlaying) {
         audioRef.current.pause();
       } else {
+        if (audioRef.current.currentTime >= audioRef.current.duration) {
+            audioRef.current.currentTime = 0;
+        }
         audioRef.current.play();
       }
       setIsPlaying(!isPlaying);
@@ -189,233 +197,103 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
 
   const handleCancelExport = () => {
     isExportCancelled.current = true;
+    if (recorderRef.current && recorderRef.current.state === 'recording') {
+        recorderRef.current.stop();
+    }
+    if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (audioRef.current) {
+        audioRef.current.pause();
+    }
   };
 
   const handleExportVideo = async () => {
-    if (!audioRef.current || imageUrls.length === 0) return;
+    if (!audioRef.current) return;
     isExportCancelled.current = false;
-    setExportProgress({ message: '正在初始化...', progress: 0 });
-
-    const canvas = document.createElement('canvas');
-    const getCanvasDimensions = () => {
-        const baseWidth = resolution === '1080p' ? 1920 : 1280;
-        const baseHeight = resolution === '1080p' ? 1080 : 720;
-        switch (aspectRatio) {
-            case '16:9': return { width: baseWidth, height: baseHeight };
-            case '9:16': return { width: baseHeight, height: baseWidth };
-            case '1:1': return { width: baseHeight, height: baseHeight };
-            default: return { width: 1280, height: 720 };
-        }
-    };
-
-    const { width, height } = getCanvasDimensions();
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      alert('無法初始化 Canvas 進行匯出。');
-      setExportProgress(null);
-      return;
+    
+    const wasPlaying = isPlaying;
+    if (wasPlaying) {
+        handlePlayPause();
     }
-
-    const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(err);
-        img.src = src;
-    });
-
+    
     try {
-      setExportProgress({ message: '正在載入資源...', progress: 5 });
-      const loadedImages = await Promise.all(imageUrls.map(loadImage));
-      const albumImage = loadedImages[0]; // Use the first image as the main album art
-      setExportProgress({ message: '資源載入完畢', progress: 10 });
-      
-      const audio = audioRef.current;
-      const wasPlaying = isPlaying;
-      if (wasPlaying) handlePlayPause();
-
-      const audioContext = new AudioContext();
-      const audioSource = audioContext.createMediaElementSource(audio);
-      const audioDestination = audioContext.createMediaStreamDestination();
-      audioSource.connect(audioDestination);
-      // Removed audioSource.connect(audioContext.destination) to prevent playback during export
-      const audioStream = audioDestination.stream;
-
-      const videoStream = canvas.captureStream(30);
-
-      const combinedStream = new MediaStream([
-        ...videoStream.getVideoTracks(),
-        ...audioStream.getAudioTracks(),
-      ]);
-
-      const MimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-      const fileExtension = MimeType.includes('mp4') ? 'mp4' : 'webm';
-
-      const recorder = new MediaRecorder(combinedStream, { mimeType: MimeType });
-      const recordedChunks: Blob[] = [];
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunks.push(event.data);
-      };
-
-      recorder.onstop = () => {
-        if (!isExportCancelled.current) {
-          const blob = new Blob(recordedChunks, { type: MimeType });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${songTitle} - ${artistName}.${fileExtension}`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-        combinedStream.getTracks().forEach(track => track.stop());
-        audioContext.close();
-        setExportProgress(null);
-        if(wasPlaying) audio.play();
-      };
-      
-      let animationFrameId: number;
-      audio.currentTime = 0;
-      audio.play();
-      recorder.start();
-      
-      const baseCanvasHeight = 720;
-      const fontScale = canvas.height / baseCanvasHeight;
-      const scaledFontSize = fontSize * fontScale;
-      const lyricLineHeight = scaledFontSize * 1.5;
-      
-      let initialTranslateY = canvas.height / 2 - (2 * lyricLineHeight) - lyricLineHeight / 2;
-      let currentCanvasTranslateY = initialTranslateY;
-
-      const drawFrame = () => {
-        const currentPlaybackTime = audio.currentTime;
-        const duration = audio.duration;
-
-        if (currentPlaybackTime >= duration || recorder.state !== 'recording' || isExportCancelled.current) {
-          if (recorder.state === 'recording') recorder.stop();
-          if (audio) { audio.pause(); audio.currentTime = 0; }
-          cancelAnimationFrame(animationFrameId);
-          return;
-        }
-
-        const progress = (currentPlaybackTime / duration) * 100;
-        setExportProgress({ 
-          message: `正在錄製影片... (${formatTime(currentPlaybackTime)} / ${formatTime(duration)})`, 
-          progress 
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { mediaSource: "tab" } as any,
+            audio: true,
         });
+        mediaStreamRef.current = stream;
 
-        // --- Start Drawing on Canvas ---
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Determine current background image
-        const currentBgIndex = Math.min(Math.floor(currentPlaybackTime / imageSwitchInterval), loadedImages.length - 1);
-        const currentBgImage = loadedImages[currentBgIndex];
-
-        ctx.save();
-        ctx.filter = 'blur(16px) brightness(0.7)';
-        ctx.drawImage(currentBgImage, -20, -20, canvas.width + 40, canvas.height + 40);
-        ctx.restore();
-
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        const lyricIdx = timedLyrics.findIndex(l => currentPlaybackTime >= l.startTime && currentPlaybackTime < l.endTime);
-        
-        let canvasCurrentIndex;
-        if (lyricIdx !== -1) {
-            canvasCurrentIndex = lyricIdx + 2;
-        } else if (timedLyrics.length > 0 && currentPlaybackTime >= timedLyrics[timedLyrics.length - 1].endTime) {
-            canvasCurrentIndex = timedLyrics.length + 2;
-        } else {
-            canvasCurrentIndex = 1;
+        if (stream.getAudioTracks().length === 0) {
+            alert("您沒有分享分頁音訊！請重新操作並務必勾選「分享分頁音訊」選項。");
+            stream.getTracks().forEach(track => track.stop());
+            return;
         }
 
+        setExportProgress({ message: '準備錄製... 請勿離開此分頁或改變視窗大小' });
+        
+        const MimeType = 'video/webm';
+        const recorder = new MediaRecorder(stream, { mimeType: MimeType });
+        recorderRef.current = recorder;
+        const recordedChunks: Blob[] = [];
 
-        // --- Layout Specific Drawing ---
-        if (aspectRatio === '16:9') {
-            const leftColWidth = canvas.width * (3 / 5);
-            const rightColWidth = canvas.width * (2 / 5);
-            const albumArtSize = Math.min(canvas.height * 0.4, rightColWidth * 0.75);
-            const albumX = leftColWidth + (rightColWidth - albumArtSize) / 2;
-            const albumY = (canvas.height - albumArtSize) / 2 - (canvas.height * 0.04);
+        recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) recordedChunks.push(event.data);
+        };
+
+        stream.getVideoTracks()[0].onended = () => {
+            if (recorder.state === 'recording') {
+                recorder.stop();
+            }
+        };
+
+        recorder.onstop = () => {
+            if (!isExportCancelled.current && recordedChunks.length > 0) {
+                const blob = new Blob(recordedChunks, { type: MimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${songTitle} - ${artistName}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
             
-            ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'; ctx.shadowBlur = 15; ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 8;
-            ctx.drawImage(albumImage, albumX, albumY, albumArtSize, albumArtSize);
-            ctx.restore();
-
-            ctx.fillStyle = 'white'; ctx.textAlign = 'center';
-            ctx.font = `700 ${24 * fontScale}px ${fontFamily}`;
-            ctx.fillText(songTitle, leftColWidth + rightColWidth / 2, albumY + albumArtSize + (40 * fontScale), rightColWidth * 0.9);
-            
-            ctx.fillStyle = '#E5E7EB'; ctx.font = `500 ${20 * fontScale}px ${fontFamily}`;
-            ctx.fillText(artistName, leftColWidth + rightColWidth / 2, albumY + albumArtSize + (70 * fontScale), rightColWidth * 0.9);
-            
-            const targetTranslateY = canvas.height / 2 - (canvasCurrentIndex * lyricLineHeight) - lyricLineHeight / 2;
-            currentCanvasTranslateY += (targetTranslateY - currentCanvasTranslateY) * 0.1;
-
-            ctx.save();
-            ctx.rect(0, 0, leftColWidth, canvas.height); ctx.clip();
-            ctx.translate(0, currentCanvasTranslateY); ctx.textAlign = 'left';
-            
-            lyricsToRender.forEach((lyric, index) => {
-                const style = getLyricStyle(index, canvasCurrentIndex, fontScale);
-                ctx.font = style.font!; ctx.globalAlpha = style.opacity!;
-                ctx.fillStyle = style.color;
-                ctx.fillText(lyric.text, 60 * fontScale, index * lyricLineHeight);
-            });
-            ctx.restore();
-        } else { // 9:16 and 1:1 portrait-style layout
-            const topAreaHeight = canvas.height * 0.5;
-            const bottomAreaHeight = canvas.height * 0.5;
-            const albumArtSize = Math.min(canvas.width * 0.55, topAreaHeight * 0.55);
-            const albumX = (canvas.width - albumArtSize) / 2;
-            const albumY = (topAreaHeight - albumArtSize) / 2;
-
-            ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'; ctx.shadowBlur = 15; ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 8;
-            ctx.drawImage(albumImage, albumX, albumY, albumArtSize, albumArtSize);
-            ctx.restore();
-
-            ctx.fillStyle = 'white'; ctx.textAlign = 'center';
-            ctx.font = `700 ${24 * fontScale}px ${fontFamily}`;
-            ctx.fillText(songTitle, canvas.width / 2, albumY + albumArtSize + (40 * fontScale), canvas.width * 0.9);
-            
-            ctx.fillStyle = '#E5E7EB'; ctx.font = `500 ${20 * fontScale}px ${fontFamily}`;
-            ctx.fillText(artistName, canvas.width / 2, albumY + albumArtSize + (70 * fontScale), canvas.width * 0.9);
-
-            const lyricClipY = topAreaHeight;
-            const lyricCenterY = lyricClipY + (bottomAreaHeight / 2);
-            const targetTranslateY = lyricCenterY - (canvasCurrentIndex * lyricLineHeight) - lyricLineHeight / 2;
-            currentCanvasTranslateY += (targetTranslateY - currentCanvasTranslateY) * 0.1;
-
-            ctx.save();
-            ctx.rect(0, lyricClipY, canvas.width, bottomAreaHeight); ctx.clip();
-            ctx.translate(0, currentCanvasTranslateY); ctx.textAlign = 'center';
-            
-            lyricsToRender.forEach((lyric, index) => {
-                const style = getLyricStyle(index, canvasCurrentIndex, fontScale);
-                ctx.font = style.font!; ctx.globalAlpha = style.opacity!;
-                ctx.fillStyle = style.color;
-                ctx.fillText(lyric.text, canvas.width / 2, index * lyricLineHeight);
-            });
-            ctx.restore();
+            stream.getTracks().forEach(track => track.stop());
+            setExportProgress(null);
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+            }
+            mediaStreamRef.current = null;
+            recorderRef.current = null;
+        };
+        
+        recorder.start();
+        if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            setCurrentTime(0);
+            await audioRef.current.play();
+            setIsPlaying(true);
+            setExportProgress({ message: '正在錄製中... 歌曲結束後將自動停止並下載。' });
         }
-        // --- End Drawing ---
 
-        animationFrameId = requestAnimationFrame(drawFrame);
-      };
-      animationFrameId = requestAnimationFrame(drawFrame);
+        audioRef.current.onended = () => {
+             if (recorderRef.current && recorderRef.current.state === 'recording') {
+                recorderRef.current.stop();
+            }
+            setIsPlaying(false);
+            if (audioRef.current) {
+                // Restore original onended handler
+                audioRef.current.onended = () => setIsPlaying(false);
+            }
+        };
 
     } catch (error) {
-      console.error("Video export failed:", error);
-      alert('影片匯出失敗！可能因為無法載入圖片或您的瀏覽器不支援此功能。');
-      setExportProgress(null);
+        console.error("Video export failed:", error);
+        alert('影片匯出失敗！您可能已取消畫面分享，或您的瀏覽器不支援此功能。');
+        setExportProgress(null);
     }
   };
     
@@ -576,7 +454,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
                 </div>
                  <div className="flex items-center gap-2 text-white">
                     <label htmlFor="resolution" className="text-xs">畫質</label>
-                    <select id="resolution" value={resolution} onChange={(e) => setResolution(e.target.value)} className="bg-gray-900/50 border border-gray-600 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-gray-500">
+                    <select id="resolution" value={resolution} onChange={(e) => setResolution(e.target.value)} className="bg-gray-900/50 border border-gray-600 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-gray-500" disabled>
                         <option value="720p">720p (HD)</option>
                         <option value="1080p">1080p (Full HD)</option>
                     </select>
@@ -590,7 +468,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ timedLyrics, audioUrl, imageU
               </div>
           </div>
           <div className="mt-3 text-center">
-            <p className="text-xs text-gray-500">注意：影片匯出在您的瀏覽器中進行，過程可能需要數分鐘且消耗大量資源。建議使用電腦操作，並避免匯出過長的影片。</p>
+            <p className="text-xs text-gray-500">注意：影片匯出採用螢幕錄製，過程將播放完整音訊。請確保勾選「分享分頁音訊」並停留在本頁直到下載開始。</p>
           </div>
         </div>
       </div>

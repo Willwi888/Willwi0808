@@ -11,12 +11,12 @@ import { parseSrt } from './utils';
 import { generateImagesForLyrics } from './services/geminiService';
 
 
-type AppState = 'FORM' | 'TIMING' | 'PREVIEW';
+type AppState = 'WELCOME' | 'FORM' | 'TIMING' | 'PREVIEW';
 
 const DEFAULT_BG_IMAGE = 'https://storage.googleapis.com/aistudio-hosting/workspace-template-assets/lyric-video-maker/default_bg.jpg';
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>('FORM');
+  const [appState, setAppState] = useState<AppState>('WELCOME');
   const [lyricsText, setLyricsText] = useState('');
   const [songTitle, setSongTitle] = useState('');
   const [artistName, setArtistName] = useState('');
@@ -26,7 +26,7 @@ const App: React.FC = () => {
   const [timedLyricsFromSrt, setTimedLyricsFromSrt] = useState<TimedLyric[] | null>(null);
   const [isLoading, setIsLoading] = useState<{ active: boolean; message: string }>({ active: false, message: '' });
   const [isAiUnlocked, setIsAiUnlocked] = useState(false);
-  const AI_PASSWORD = '8520';
+  const AI_PASSWORD = '8888';
 
   const [isMounted, setIsMounted] = useState(false);
 
@@ -139,6 +139,19 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (appState) {
+      case 'WELCOME':
+        return (
+           <div 
+                className="w-screen h-screen flex flex-col items-center justify-center text-center cursor-pointer bg-gray-900"
+                onClick={() => setAppState('FORM')}
+            >
+                <div className="transform transition-transform hover:scale-105 duration-500">
+                    <h1 className="text-4xl font-light text-gray-300 tracking-[0.2em]">榮譽股東</h1>
+                    <h2 className="text-6xl font-extrabold text-[#a6a6a6] mt-2 animate-pulse">天選之麵</h2>
+                </div>
+                <p className="text-gray-500 mt-12 text-sm">點擊任意處開始創作</p>
+            </div>
+        );
       case 'TIMING':
         return (
           <LyricsTiming
@@ -297,10 +310,14 @@ const App: React.FC = () => {
   };
 
   return (
-    <main className={`min-h-screen bg-gray-900 text-white p-4 transition-opacity duration-500 ${isMounted ? 'opacity-100' : 'opacity-0'}`}>
-      <div className="container mx-auto flex items-center justify-center h-full">
-        {renderContent()}
-      </div>
+    <main className={`min-h-screen bg-gray-900 text-white transition-opacity duration-500 ${isMounted ? 'opacity-100' : 'opacity-0'} ${appState !== 'WELCOME' && 'p-4'}`}>
+        {appState === 'WELCOME' ? (
+            renderContent()
+        ) : (
+            <div className="container mx-auto flex items-center justify-center h-full">
+                {renderContent()}
+            </div>
+        )}
     </main>
   );
 };
